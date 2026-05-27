@@ -1,0 +1,102 @@
+"""
+Usage
+-----
+    python data/scripts/crop_net_to_boundary.py \
+        --net-file data/net/larissa_full.net.xml \
+        --geojson-file OD-matrix-main/data/city_boundaries/Larissa/Larissa-v1.geojson \
+        --output data/net/keep_edges.txt
+
+Then crop with netconvert (see the printed command at the end).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import sumolib
+from shapely.geometry import shape, Point, LineString
+from shapely.ops import unary_union
+from shapely.prepared import prep
+
+
+def load_boundary(geojson_path: Path):
+    """Union all features of a GeoJSON into one (multi)polygon in lon/lat."""
+    with open(geojson_path) as f:
+        gj = json.load(f)
+
+    if gj.get("type") == "FeatureCollection":
+        geoms = [shape(ft["geometry"]) for ft in gj["features"]]
+    elif gj.get("type") == "Feature":
+        geoms = [shape(gj["geometry"])]
+    else:  # bare geometry
+        geoms = [shape(gj)]
+
+    # buffer(0) repairs self-intersections / invalid rings
+    return unary_union([g.buffer(0) for g in geoms])
+
+
+def edge_centre_lonlat(edge, net):
+    """Centroid of an edge's shape, converted from network XY to lon/lat."""
+    shape_xy = edge.getShape()
+    if len(shape_xy) == 1:
+        cx, cy = shape_xy[0]
+    else:
+        c = LineString(shape_xy).centroid
+        cx, cy = c.x, c.y
+    lon, lat = net.convertXY2LonLat(cx, cy)
+    return lon, lat
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--net-file", required=True, help="Input (large) SUMO net.")
+    parser.add_argument("--geojson-file", required=True, help="Boundary GeoJSON (lon/lat).")
+    parser.add_argument("--output", required=True, help="Edge keep-list (txt).")
+    args = parser.parse_args()
+
+    net_file = Path(args.net_file)
+    geojson_file = Path(args.geojson_file)
+    output_file = Path(args.output)
+
+    if not net_file.exists():
+        raise FileNotFoundError(f"Network file not found: {net_file}")
+    if not geojson_file.exists():
+        raise FileNotFoundError(f"GeoJSON file not found: {geojson_file}")
+
+    print("Loading network...")
+    net = sumolib.net.readNet(str(net_file), withInternal=False)
+
+    print("Loading boundary...")
+    boundary = load_boundary(geojson_file)
+    boundary_prep = prep(boundary)  # fast repeated contains() tests
+
+    edges = net.getEdges()
+    keep = []
+    for edge in edges:
+        if edge.getID().startswith(":"):  # internal edge, skip
+            continue
+        lon, lat = edge_centre_lonlat(edge, net)
+        if boundary_prep.contains(Point(lon, lat)):
+            keep.append(edge.getID())
+
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text("\n".join(keep) + "\n", encoding="utf-8")
+
+    total = sum(1 for e in edges if not e.getID().startswith(":"))
+    print(f"Edges inside boundary: {len(keep)} / {total} kept "
+          f"({100.0 * len(keep) / max(total, 1):.1f}%)")
+    print(f"Wrote keep-list -> {output_file}")
+    print()
+    print("Now crop the network with netconvert:")
+    print(
+        f"  netconvert -s {net_file} \\\n"
+        f"      --keep-edges.input-file {output_file} \\\n"
+        f"      --keep-edges.components 1 \\\n"
+        f"      -o {net_file.with_name('larissa.net.xml')}"
+    )
+
+
+if __name__ == "__main__":
+    main()
