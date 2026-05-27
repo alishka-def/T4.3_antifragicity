@@ -1,0 +1,70 @@
+{
+  "defaults": {
+    "cell_size": 3000,
+    "max_snap_dist": 1000,
+    "hourly_profiles": {
+      "hour_0": 0.5,
+      "hour_1": 0.3,
+      "hour_2": 0.2,
+      "hour_3": 0.2,
+      "hour_4": 0.3,
+      "hour_5": 0.5,
+      "hour_6": 1.2,
+      "hour_7": 1.5,
+      "hour_8": 1.4,
+      "hour_9": 1.1,
+      "hour_10": 1.0,
+      "hour_11": 0.9,
+      "hour_12": 0.9,
+      "hour_13": 1.0,
+      "hour_14": 1.0,
+      "hour_15": 1.2,
+      "hour_16": 1.4,
+      "hour_17": 1.5,
+      "hour_18": 1.3,
+      "hour_19": 1.0,
+      "hour_20": 0.7,
+      "hour_21": 0.6,
+      "hour_22": 0.5,
+      "hour_23": 0.4
+    }
+  },
+  "cities": [
+    {
+      "city_name": "Larissa",
+      "sensors_csv": "data/sensors/Larissa/Larissa_hourly_counts-v2.csv",
+      "city_shp": "data/city_boundaries/Larissa/Larissa-v1.geojson",
+      "graph": "data/graphs/Larissa/Larissa-v1.graphml",
+      "pop_raster": "data/population/Larissa/Larissa_pop_2020.tif",
+      "total_trips":  350000,
+      "target_dist": 7.5
+    },
+    {
+      "city_name": "Bratislava",
+      "sensors_csv": null,
+      "city_shp": "data/city_boundaries/Bratislava/Bratislava-v1.geojson",
+      "graph": "data/graphs/Bratislava/Bratislava-v1.graphml",
+      "pop_raster": "data/population/Bratislava/Bratislava_pop_2020.tif",
+      "total_trips":  1200000,
+      "target_dist": 6.5
+    },
+    {
+      "city_name": "Odessa",
+      "sensors_csv": null, 
+      "city_shp": "data/city_boundaries/Odessa/Odessa-v1.geojson",
+      "graph": "data/graphs/Odessa/Odessa-v1.graphml",
+      "pop_raster": "data/population/Odessa/Odessa_pop_2020.tif",
+      "total_trips":  2500000,
+      "target_dist": 9
+    },
+    {
+      "city_name": "Thessaloniki",
+      "sensors_csv": null, 
+      "city_shp": "data/city_boundaries/Thessaloniki/Thessaloniki-v1.geojson",
+      "graph": "data/graphs/Thessaloniki/Thessaloniki-v1.graphml",
+      "pop_raster": "data/population/Thessaloniki/Thessaloniki_pop_2020.tif",
+      "total_trips":  860000,
+      "target_dist": 8
+    }
+  ]
+}

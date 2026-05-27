@@ -1,0 +1,4 @@
+https://geo2day.com/europe/slovakia/bratislavsky.html?utm_source=chatgpt.com
+
+road network in "pbf" format
+which needs to be converted into "GraphML" format, ideal for analysis 
