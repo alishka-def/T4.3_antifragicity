@@ -23,7 +23,7 @@ from shapely.prepared import prep
 
 def load_boundary(geojson_path: Path):
     """Union all features of a GeoJSON into one (multi)polygon in lon/lat."""
-    with open(geojson_path) as f:
+    with open(geojson_path, encoding="utf-8") as f:
         gj = json.load(f)
 
     if gj.get("type") == "FeatureCollection":
