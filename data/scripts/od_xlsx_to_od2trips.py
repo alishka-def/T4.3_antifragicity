@@ -31,14 +31,24 @@ Usage
 from __future__ import annotations
 
 import argparse
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pandas as pd
 
 
+def load_taz_ids(taz_path: Path) -> set:
+    """Collect the set of <taz id="..."> defined in a SUMO TAZ file."""
+    root = ET.parse(taz_path).getroot()
+    return {taz.get("id") for taz in root.iter("taz") if taz.get("id")}
+
+
 def write_o_format(path: Path, matrix: pd.DataFrame, hour: int,
-                   factor: float, drop_intrazonal: bool) -> int:
-    """Write one hourly matrix as a VISUM O-format file. Returns #relations."""
+                   factor: float, drop_intrazonal: bool, valid_zones) -> tuple:
+    """Write one hourly matrix as a VISUM O-format file.
+
+    Returns (n_relations_written, trips_dropped_for_missing_zones).
+    """
     lines = [
         "$OR;D2",
         "* From-Time  To-Time",
@@ -49,6 +59,7 @@ def write_o_format(path: Path, matrix: pd.DataFrame, hour: int,
     ]
 
     n_rel = 0
+    dropped = 0.0
     origins = matrix.index.tolist()
     dests = matrix.columns.tolist()
     for o in origins:
@@ -59,11 +70,16 @@ def write_o_format(path: Path, matrix: pd.DataFrame, hour: int,
             amount = float(row[d])
             if amount <= 0.0:
                 continue
+            # Skip relations whose origin or destination has no TAZ definition
+            # (e.g. fringe cells with no edges after cropping/vclass filtering).
+            if valid_zones is not None and (o not in valid_zones or d not in valid_zones):
+                dropped += amount
+                continue
             lines.append(f"{o} {d} {amount:.4f}")
             n_rel += 1
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return n_rel
+    return n_rel, dropped
 
 
 def main() -> None:
@@ -75,11 +91,23 @@ def main() -> None:
                         help="Global scaling factor written into each file.")
     parser.add_argument("--drop-intrazonal", action="store_true",
                         help="Skip origin==destination (within-zone) trips.")
+    parser.add_argument("--taz-file", default=None,
+                        help="SUMO TAZ file; OD relations referencing a zone not "
+                             "defined here are skipped (avoids od2trips "
+                             "'Missing destination' errors).")
     args = parser.parse_args()
 
     xlsx_path = Path(args.xlsx)
     if not xlsx_path.exists():
         raise FileNotFoundError(f"xlsx not found: {xlsx_path}")
+
+    valid_zones = None
+    if args.taz_file:
+        taz_path = Path(args.taz_file)
+        if not taz_path.exists():
+            raise FileNotFoundError(f"TAZ file not found: {taz_path}")
+        valid_zones = load_taz_ids(taz_path)
+        print(f"Loaded {len(valid_zones)} TAZ ids from {taz_path.name}")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +115,7 @@ def main() -> None:
     xls = pd.ExcelFile(xlsx_path)
     written = []
     grand_total = 0.0
+    total_dropped = 0.0
     for hour in range(24):
         sheet = f"hour_{hour}"
         if sheet not in xls.sheet_names:
@@ -95,8 +124,11 @@ def main() -> None:
 
         matrix = pd.read_excel(xls, sheet_name=sheet, index_col=0)
         out_path = out_dir / f"{args.prefix}_hour_{hour}.od"
-        n_rel = write_o_format(out_path, matrix, hour, args.factor, args.drop_intrazonal)
+        n_rel, dropped = write_o_format(
+            out_path, matrix, hour, args.factor, args.drop_intrazonal, valid_zones
+        )
         grand_total += matrix.values.sum()
+        total_dropped += dropped
         written.append(out_path)
         print(f"  {sheet}: {n_rel} OD relations -> {out_path.name}")
 
@@ -105,6 +137,9 @@ def main() -> None:
 
     print(f"\nWrote {len(written)} O-format files. Matrix grand total "
           f"(all hours, before factor): {grand_total:,.0f} trips")
+    if valid_zones is not None:
+        print(f"Dropped {total_dropped:,.1f} trips referencing zones absent "
+              f"from the TAZ file ({100.0 * total_dropped / max(grand_total, 1):.2f}%).")
     print("\nFeed them to od2trips (PowerShell):")
     print(f'  $ods = ((0..23) | ForEach-Object {{ "{out_dir}\\{args.prefix}_hour_$_.od" }}) -join ","')
     print('  & "$env:SUMO_HOME\\bin\\od2trips.exe" '
