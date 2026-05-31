@@ -60,7 +60,8 @@ T4.3_antifragicity/
     │   ├── crop_net_to_boundary.py     ← keep only edges inside the city boundary
     │   ├── geojson_to_sumo_poly.py     ← grid GeoJSON → SUMO polygon (.poly.xml)
     │   ├── build_grid_taz_zones.py     ← rebuild the SAME grid zones as the OD pipeline
-    │   └── od_xlsx_to_od2trips.py      ← hourly OD xlsx → VISUM O-format .od files
+    │   ├── od_xlsx_to_od2trips.py      ← hourly OD xlsx → VISUM O-format .od files
+    │   └── run_simulation.py           ← headless 24h run: progress bar, timing, VKT/VHT
     │
     ├── raw/                      ← raw OSM input
     │   └── larissa.osm.xml       ← OSM extract for Larissa (greece-latest.osm.pbf is git-ignored)
@@ -74,9 +75,11 @@ T4.3_antifragicity/
     │   └── larissa.taz.xml        ← Traffic Assignment Zones: each Z* mapped to its edges
     ├── od/
     │   └── larissa_hour_0.od … larissa_hour_23.od   ← per-hour O-format OD matrices
-    └── routes/
-        ├── larissa.odtrips.xml   ← raw trips from od2trips (origin/destination edges)
-        └── larissa.rou.xml       ← **routed vehicles** for SUMO (git-ignored, you rebuild it)
+    ├── routes/
+    │   ├── larissa.odtrips.xml   ← raw trips from od2trips (origin/destination edges)
+    │   └── larissa.rou.xml       ← **routed vehicles** for SUMO (git-ignored, you rebuild it)
+    └── sim/                      ← simulation outputs (git-ignored)
+        └── larissa.tripinfo.xml  ← per-vehicle results used for VKT/VHT
 ```
 
 > **Note on git-ignored files.** Large or generated artefacts are listed in
@@ -345,6 +348,61 @@ green ▶ **play** button in the GUI to start; the red polygons are the OD zones
 > `larissa.taz.xml`, the `*.od` files, `larissa.odtrips.xml`, and
 > `larissa_zones.poly.xml`, you only need to regenerate the two git-ignored network
 > files (Steps 1–2) and the routes (Step 6), then launch Step 7.
+
+---
+
+### Step 8 — Run the full 24-hour simulation headless + measure VKT / VHT
+For the actual experiment you want the **headless** `sumo` binary (faster than the
+GUI), a progress bar, the wall-clock runtime, and the network performance metrics
+**VKT** (Vehicle-Kilometres Travelled) and **VHT** (Vehicle-Hours Travelled).
+`data/scripts/run_simulation.py` drives `sumo` over TraCI to do all of this:
+```powershell
+python data\scripts\run_simulation.py `
+    --net data\net\larissa.net.xml `
+    --routes data\routes\larissa.rou.xml `
+    --tripinfo data\sim\larissa.tripinfo.xml `
+    --horizon 86400
+```
+**What it does:**
+- Launches the **headless** `sumo` binary (via `sumolib.checkBinary("sumo")`),
+  *not* `sumo-gui`.
+- Shows a live progress bar with percentage, simulated time / 24 h, the number of
+  vehicles currently in the network, and elapsed wall-clock time, e.g.
+  `[################------] 41.7% | sim 10.00h (36000s) | veh running: 4821 | elapsed 0:02:13`.
+  The 24-hour demand window (`--horizon 86400`) drives the percentage; once past it
+  the bar switches to a **drain** phase while the last trips finish.
+- Writes per-vehicle results to `data/sim/larissa.tripinfo.xml`
+  (`--tripinfo-output.write-unfinished` so vehicles still en route at the end are
+  also counted), then computes:
+  - **VKT** = Σ `routeLength` ÷ 1000  (veh-km)
+  - **VHT** = Σ `duration` ÷ 3600  (veh-h)  — cross-checked against a live integral
+    of the vehicle count
+  - **network mean speed** = VKT ÷ VHT  (km/h)
+- Reports the **wall-clock runtime in seconds** (and `H:MM:SS`).
+
+It prints a summary block at the end:
+```
+========================  SIMULATION SUMMARY  ========================
+  Simulation steps       : 90,123  (step length 1s)
+  Simulated end time     : 90,123s  (25.03h)
+  Peak vehicles in net   : 6,540
+  Vehicles in tripinfo   : 248,401
+  -------------------------------------------------------------------
+  VKT (Vehicle-Km Travel): 1,234,567.8 veh-km
+  VHT (Vehicle-Hr Travel): 34,567.12 veh-h   (live check: 34,560.40 veh-h)
+  Network mean speed     : 35.71 km/h
+  -------------------------------------------------------------------
+  Wall-clock runtime     : 642.18 s   (0:10:42)
+======================================================================
+```
+Useful options: `--step-length 0.5` (finer steps), `--end 90000` (hard stop time
+passed to SUMO), `--additional data\zones\larissa_zones.poly.xml` (load the zone
+polygons too). Requires `SUMO_HOME` to be set so `traci`/`sumolib` import.
+
+> **Note.** The 24-hour demand finishes injecting vehicles at 86 400 s, but trips
+> that depart late keep driving past that, so the simulation runs a little beyond
+> 24 h until the network empties — that tail is the "drain" phase and is included
+> in VKT/VHT. Use `--end 86400` if you instead want a hard cut-off at exactly 24 h.
 
 ---
 
