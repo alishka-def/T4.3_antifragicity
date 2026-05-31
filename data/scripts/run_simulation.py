@@ -90,6 +90,11 @@ def main() -> None:
                         help="Progress-bar width in characters.")
     parser.add_argument("--sumo-binary", default="sumo",
                         help="SUMO binary to use ('sumo' = headless; not sumo-gui).")
+    parser.add_argument("--no-warnings", action="store_true",
+                        help="Suppress SUMO warning messages (e.g. teleport spam).")
+    parser.add_argument("--time-to-teleport", type=float, default=300.0,
+                        help="Seconds a vehicle may be stuck before SUMO teleports "
+                             "it (-1 disables teleporting). Default 300.")
     args = parser.parse_args()
 
     net_file = Path(args.net)
@@ -114,8 +119,10 @@ def main() -> None:
         "--tripinfo-output.write-unfinished",  # capture vehicles still en route
         "--no-step-log", "true",               # silence SUMO's own step log
         "--duration-log.statistics", "true",   # SUMO prints its own veh stats too
-        "--time-to-teleport", "300",
+        "--time-to-teleport", str(args.time_to_teleport),
     ]
+    if args.no_warnings:
+        cmd += ["--no-warnings", "true"]       # silence teleport/jam warnings
     if args.additional:
         cmd += ["--additional-files", str(args.additional)]
     if args.end is not None:
