@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Larissa SUMO configuration. Paths are relative to this file (the data/ folder).
+  Launch with:   sumo -c data/larissa.sumocfg        (headless)
+            or:   sumo-gui -c data/larissa.sumocfg    (with the zone polygons)
+  The net and routes are git-ignored; rebuild them with scripts/build_pipeline.py.
+-->
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="net/larissa.net.xml"/>
+        <route-files value="routes/larissa.rou.xml"/>
+        <additional-files value="zones/larissa_zones.poly.xml"/>
+    </input>
+
+    <output>
+        <tripinfo-output value="sim/larissa.tripinfo.xml"/>
+        <tripinfo-output.write-unfinished value="true"/>
+        <statistic-output value="sim/larissa.stats.xml"/>
+        <summary-output value="sim/larissa.summary.xml"/>
+    </output>
+
+    <time>
+        <begin value="0"/>
+        <step-length value="1"/>
+    </time>
+
+    <processing>
+        <time-to-teleport value="300"/>
+    </processing>
+
+    <report>
+        <no-step-log value="true"/>
+        <duration-log.statistics value="true"/>
+    </report>
+
+</configuration>
