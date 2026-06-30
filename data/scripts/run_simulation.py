@@ -46,26 +46,35 @@ def render_bar(frac: float, sim_time: float, running: int,
     sys.stderr.flush()
 
 
-def parse_tripinfo(path: Path) -> tuple[float, float, int]:
-    """Sum routeLength (m) and duration (s) over all tripinfo entries.
+class TripStats:
+    """Aggregates streamed over the tripinfo file (see parse_tripinfo)."""
+    total_m = 0.0          # Σ routeLength (m)            -> VKT
+    total_s = 0.0          # Σ duration (s)               -> VHT / time spent
+    total_timeloss = 0.0   # Σ timeLoss (s)               -> delay vs free-flow
+    total_waiting = 0.0    # Σ waitingTime (s)            -> standstill time
+    n = 0                  # vehicles in tripinfo
+    n_unfinished = 0       # vehicles still en route at sim end
 
-    Returns (total_metres, total_seconds, n_vehicles). Uses iterparse so it
-    streams large files instead of loading them whole.
+
+def parse_tripinfo(path: Path) -> TripStats:
+    """Stream the tripinfo file and accumulate per-vehicle network metrics.
+
+    Uses iterparse so large files are not loaded whole. Vehicles still running at
+    the end (written via --tripinfo-output.write-unfinished) carry arrival="-1".
     """
-    total_m = 0.0
-    total_s = 0.0
-    n = 0
+    s = TripStats()
     for _event, elem in ET.iterparse(str(path), events=("end",)):
         if elem.tag != "tripinfo":
             continue
-        route_len = float(elem.get("routeLength", 0.0) or 0.0)
-        duration = float(elem.get("duration", 0.0) or 0.0)
-        # Unfinished/aborted vehicles can report -1; clamp to 0.
-        total_m += max(route_len, 0.0)
-        total_s += max(duration, 0.0)
-        n += 1
+        s.total_m += max(float(elem.get("routeLength", 0.0) or 0.0), 0.0)
+        s.total_s += max(float(elem.get("duration", 0.0) or 0.0), 0.0)
+        s.total_timeloss += max(float(elem.get("timeLoss", 0.0) or 0.0), 0.0)
+        s.total_waiting += max(float(elem.get("waitingTime", 0.0) or 0.0), 0.0)
+        if float(elem.get("arrival", 0.0) or 0.0) < 0:
+            s.n_unfinished += 1
+        s.n += 1
         elem.clear()  # free memory as we go
-    return total_m, total_s, n
+    return s
 
 
 def main() -> None:
@@ -78,6 +87,12 @@ def main() -> None:
                         help="Optional additional file(s), e.g. zone polygons.")
     parser.add_argument("--tripinfo", default="data/larissa/sim/larissa.tripinfo.xml",
                         help="Where to write per-vehicle tripinfo (used for VKT/VHT).")
+    parser.add_argument("--statistic-output", default="data/sim/larissa.stats.xml",
+                        help="Where to write SUMO's own aggregate statistics XML "
+                             "(authoritative cross-check; '' to disable).")
+    parser.add_argument("--summary-output", default=None,
+                        help="Optional per-step summary XML (running/halting "
+                             "vehicles, mean speed) for an hourly congestion profile.")
     parser.add_argument("--step-length", type=float, default=1.0,
                         help="Simulation step length in seconds.")
     parser.add_argument("--horizon", type=float, default=86400.0,
@@ -107,6 +122,10 @@ def main() -> None:
         raise FileNotFoundError(f"Route file not found: {routes_file}")
     tripinfo_file.parent.mkdir(parents=True, exist_ok=True)
 
+    stats_file = Path(args.statistic_output) if args.statistic_output else None
+    if stats_file:
+        stats_file.parent.mkdir(parents=True, exist_ok=True)
+
     # Resolve the headless binary explicitly so we never start the GUI.
     sumo_bin = sumolib.checkBinary(args.sumo_binary)
 
@@ -121,6 +140,10 @@ def main() -> None:
         "--duration-log.statistics", "true",   # SUMO prints its own veh stats too
         "--time-to-teleport", str(args.time_to_teleport),
     ]
+    if stats_file:
+        cmd += ["--statistic-output", str(stats_file)]
+    if args.summary_output:
+        cmd += ["--summary-output", str(args.summary_output)]
     if args.no_warnings:
         cmd += ["--no-warnings", "true"]       # silence teleport/jam warnings
     if args.additional:
@@ -137,6 +160,7 @@ def main() -> None:
     vht_seconds_live = 0.0   # integral of running-vehicle count * step_length
     steps = 0
     max_running = 0
+    teleports = 0            # vehicles teleported past jams (masks gridlock)
 
     wall_start = time.perf_counter()
     traci.start(cmd)
@@ -148,6 +172,7 @@ def main() -> None:
             sim_time = traci.simulation.getTime()
             running = traci.vehicle.getIDCount()
             vht_seconds_live += running * step_length
+            teleports += traci.simulation.getStartingTeleportNumber()
             if running > max_running:
                 max_running = running
 
@@ -166,13 +191,21 @@ def main() -> None:
     sys.stderr.write("\n")
     sys.stderr.flush()
 
-    # --- Authoritative VKT/VHT from tripinfo --------------------------------
+    # --- Authoritative network metrics from tripinfo ------------------------
     vkt = vht = 0.0
-    n_veh = 0
+    n_veh = n_arrived = 0
+    mean_dist_km = mean_dur_min = delay_h = waiting_h = float("nan")
     if tripinfo_file.exists():
-        total_m, total_s, n_veh = parse_tripinfo(tripinfo_file)
-        vkt = total_m / 1000.0
-        vht = total_s / 3600.0
+        t = parse_tripinfo(tripinfo_file)
+        n_veh = t.n
+        n_arrived = t.n - t.n_unfinished
+        vkt = t.total_m / 1000.0
+        vht = t.total_s / 3600.0
+        delay_h = t.total_timeloss / 3600.0
+        waiting_h = t.total_waiting / 3600.0
+        if t.n:
+            mean_dist_km = (t.total_m / t.n) / 1000.0
+            mean_dur_min = (t.total_s / t.n) / 60.0
 
     vht_live = vht_seconds_live / 3600.0
     mean_speed = (vkt / vht) if vht > 0 else float("nan")
@@ -183,13 +216,20 @@ def main() -> None:
     print(f"  Simulation steps       : {steps:,}  (step length {step_length:g}s)")
     print(f"  Simulated end time     : {sim_end_time:,.0f}s  ({sim_end_time / 3600.0:.2f}h)")
     print(f"  Peak vehicles in net   : {max_running:,}")
-    print(f"  Vehicles in tripinfo   : {n_veh:,}")
+    print(f"  Vehicles in tripinfo   : {n_veh:,}  (arrived {n_arrived:,}, "
+          f"unfinished {n_veh - n_arrived:,})")
+    print(f"  Teleports (jam escapes): {teleports:,}")
     print("  -------------------------------------------------------------------")
     print(f"  VKT (Vehicle-Km Travel): {vkt:,.1f} veh-km")
     print(f"  VHT (Vehicle-Hr Travel): {vht:,.2f} veh-h   (live check: {vht_live:,.2f} veh-h)")
     print(f"  Network mean speed     : {mean_speed:,.2f} km/h")
+    print(f"  Mean trip             : {mean_dist_km:,.2f} km / {mean_dur_min:,.1f} min")
+    print(f"  Total delay (timeLoss) : {delay_h:,.2f} veh-h")
+    print(f"  Total waiting (stops)  : {waiting_h:,.2f} veh-h")
     print("  -------------------------------------------------------------------")
     print(f"  Wall-clock runtime     : {wall_seconds:,.2f} s   ({fmt_hms(wall_seconds)})")
+    if stats_file and stats_file.exists():
+        print(f"  SUMO statistics XML    : {stats_file}")
     print("======================================================================")
 
 

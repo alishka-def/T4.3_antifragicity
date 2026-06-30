@@ -1,0 +1,47 @@
+import os
+import pandas as pd
+import win32com.client
+
+# paths
+ver_path = r"C:\Users\aakopian\Documents\GitHub\T4.3_antifragicity\matrix_to_csv\DM_ZK1Base_2014_BA.ver"
+out_dir = r"C:\Users\aakopian\Documents\GitHub\T4.3_antifragicity\matrix_to_csv"
+os.makedirs(out_dir, exist_ok=True)
+
+# matrix number you want to export
+target_matrix_no = 12
+
+# start Visum and load model
+Visum = win32com.client.Dispatch("Visum.Visum")
+Visum.LoadVersion(ver_path)
+
+# get zone numbers for row/column labels
+zones = Visum.Net.Zones.GetMultiAttValues("No", False)
+zone_nos = [int(z[1]) for z in zones]
+
+# go through all matrices, but export only the target one
+iterator = Visum.Net.Matrices.Iterator
+
+while iterator.Valid:
+    matrix = iterator.Item
+    matrix_no = int(matrix.AttValue("No"))
+
+    # skip all matrices except the one we want
+    if matrix_no != target_matrix_no:
+        iterator.Next()
+        continue
+
+    # read matrix values
+    values = list(matrix.GetValuesFloat())
+
+    # convert to DataFrame
+    df = pd.DataFrame(values, index=zone_nos, columns=zone_nos)
+    df.index.name = "Origin"
+
+    # save to CSV
+    out_file = os.path.join(out_dir, f"matrix_{matrix_no}.csv")
+    df.to_csv(out_file)
+
+    print(f"Exported matrix {matrix_no} to {out_file}")
+
+    # stop after exporting the target matrix
+    break
