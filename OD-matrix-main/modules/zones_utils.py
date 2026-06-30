@@ -114,10 +114,15 @@ def create_zones(city_gdf, cell_size, pop_raster_path):
             except ValueError:
                 raise ValueError("City polygon does not overlap raster!")
 
-        # Use first band and set nodata to 0
-        clipped = clipped[0]
+        # Use first band; robustly clean nodata / sentinels / impossible values.
+        # Population rasters carry NoData over sea/rivers/forest; if it leaks in
+        # it inflates a zone's pop and (via pop[i]*pop[j]) dominates the OD matrix.
+        clipped = clipped[0].astype("float64")
         if src.nodata is not None:
-            clipped[clipped == src.nodata] = 0
+            clipped[clipped == src.nodata] = 0.0
+        clipped[~np.isfinite(clipped)] = 0.0   # NaN / +-inf (reprojection, float fill)
+        clipped[clipped < 0] = 0.0             # -9999 / -200 / -3.4e38 sentinels
+        clipped[clipped > 1e6] = 0.0           # no single pixel holds >1e6 people
 
     # -----------------------------
     # Compute zonal population

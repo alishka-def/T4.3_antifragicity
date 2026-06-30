@@ -4,7 +4,7 @@ Usage
     python data/scripts/build_grid_taz_zones.py \
         --city-shp OD-matrix-main/data/city_boundaries/Larissa/Larissa-v1.geojson \
         --cell-size 3000 \
-        --output data/zones/larissa_grid_zones.geojson
+        --output data/larissa/zones/larissa_grid_zones.geojson
 """
 
 from __future__ import annotations

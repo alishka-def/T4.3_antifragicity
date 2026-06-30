@@ -56,15 +56,6 @@
       "pop_raster": "data/population/Odessa/Odessa_pop_2020.tif",
       "total_trips":  2500000,
       "target_dist": 9
-    },
-    {
-      "city_name": "Thessaloniki",
-      "sensors_csv": null, 
-      "city_shp": "data/city_boundaries/Thessaloniki/Thessaloniki-v1.geojson",
-      "graph": "data/graphs/Thessaloniki/Thessaloniki-v1.graphml",
-      "pop_raster": "data/population/Thessaloniki/Thessaloniki_pop_2020.tif",
-      "total_trips":  860000,
-      "target_dist": 8
     }
   ]
 }

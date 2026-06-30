@@ -1,6 +1,23 @@
-data/net/larissa.net.xml
-data/raw/greece-latest.osm.pbf
-data/net/larissa_full.net.xml
-data/routes/larissa.rou.alt.xml
-data/routes/larissa.rou.xml
-data/sim/
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Large / generated SUMO artefacts (regenerated locally, per city) ---
+# Networks (netconvert), routed vehicles (duarouter), raw OSM extracts, od2trips
+# trips, and simulation outputs. Committed inputs (*.od, *.taz.xml, *.poly.xml,
+# keep_edges.txt, *_grid_zones.geojson) are kept.
+data/*/net/*.net.xml
+data/*/raw/*.osm.pbf
+data/*/raw/*.osm.pbf.*
+data/*/raw/*.osm.xml
+data/*/routes/*.rou.xml
+data/*/routes/*.rou.alt.xml
+data/*/routes/*.odtrips.xml
+data/*/sim/*.xml
+
+# --- Large matrix / VISUM exports ---
+matrix_to_csv/*.ver

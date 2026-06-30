@@ -85,7 +85,8 @@ def main() -> None:
             )
 
     tree = ET.ElementTree(root)
-    ET.indent(tree, space="  ")
+    if hasattr(ET, "indent"):  # ET.indent was added in Python 3.9; skip on 3.8
+        ET.indent(tree, space="  ")
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
 
     print(f"Wrote SUMO polygon file: {output_file}")

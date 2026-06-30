@@ -2,9 +2,9 @@
 Usage
 -----
     python data/scripts/crop_net_to_boundary.py \
-        --net-file data/net/larissa_full.net.xml \
+        --net-file data/larissa/net/larissa_full.net.xml \
         --geojson-file OD-matrix-main/data/city_boundaries/Larissa/Larissa-v1.geojson \
-        --output data/net/keep_edges.txt
+        --output data/larissa/net/keep_edges.txt
 
 Then crop with netconvert (see the printed command at the end).
 """
@@ -54,6 +54,12 @@ def main() -> None:
     parser.add_argument("--net-file", required=True, help="Input (large) SUMO net.")
     parser.add_argument("--geojson-file", required=True, help="Boundary GeoJSON (lon/lat).")
     parser.add_argument("--output", required=True, help="Edge keep-list (txt).")
+    parser.add_argument("--buffer-m", type=float, default=0.0,
+                        help="Buffer the boundary by this many metres before testing "
+                             "edge centres. Use a positive value (e.g. 1500) for cities "
+                             "split by a river, so the bridges (whose centres lie over "
+                             "the water, outside the boundary) are kept and both banks "
+                             "stay in one connected component.")
     args = parser.parse_args()
 
     net_file = Path(args.net_file)
@@ -70,6 +76,11 @@ def main() -> None:
 
     print("Loading boundary...")
     boundary = load_boundary(geojson_file)
+    if args.buffer_m > 0:
+        import geopandas as gpd
+        boundary = (gpd.GeoSeries([boundary], crs=4326)
+                    .to_crs(3857).buffer(args.buffer_m).to_crs(4326).iloc[0])
+        print(f"  buffered boundary by {args.buffer_m:.0f} m (to keep river bridges)")
     boundary_prep = prep(boundary)  # fast repeated contains() tests
 
     edges = net.getEdges()
@@ -90,11 +101,12 @@ def main() -> None:
     print(f"Wrote keep-list -> {output_file}")
     print()
     print("Now crop the network with netconvert:")
+    out_net = net_file.name.replace("_full", "")  # <city>_full.net.xml -> <city>.net.xml
     print(
         f"  netconvert -s {net_file} \\\n"
         f"      --keep-edges.input-file {output_file} \\\n"
         f"      --keep-edges.components 1 \\\n"
-        f"      -o {net_file.with_name('larissa.net.xml')}"
+        f"      -o {net_file.with_name(out_net)}"
     )
 
 

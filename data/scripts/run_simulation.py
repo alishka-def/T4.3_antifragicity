@@ -2,10 +2,10 @@ r"""
 Usage
 -----
     python data/scripts/run_simulation.py \
-        --net data/net/larissa.net.xml \
-        --routes data/routes/larissa.rou.xml \
-        --additional data/zones/larissa_zones.poly.xml \
-        --tripinfo data/sim/larissa.tripinfo.xml \
+        --net data/larissa/net/larissa.net.xml \
+        --routes data/larissa/routes/larissa.rou.xml \
+        --additional data/larissa/zones/larissa_zones.poly.xml \
+        --tripinfo data/larissa/sim/larissa.tripinfo.xml \
         --horizon 86400
 """
 from __future__ import annotations
@@ -70,13 +70,13 @@ def parse_tripinfo(path: Path) -> tuple[float, float, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--net", default="data/net/larissa.net.xml",
+    parser.add_argument("--net", default="data/larissa/net/larissa.net.xml",
                         help="SUMO network file.")
-    parser.add_argument("--routes", default="data/routes/larissa.rou.xml",
+    parser.add_argument("--routes", default="data/larissa/routes/larissa.rou.xml",
                         help="Routed vehicles (duarouter output).")
     parser.add_argument("--additional", default=None,
                         help="Optional additional file(s), e.g. zone polygons.")
-    parser.add_argument("--tripinfo", default="data/sim/larissa.tripinfo.xml",
+    parser.add_argument("--tripinfo", default="data/larissa/sim/larissa.tripinfo.xml",
                         help="Where to write per-vehicle tripinfo (used for VKT/VHT).")
     parser.add_argument("--step-length", type=float, default=1.0,
                         help="Simulation step length in seconds.")

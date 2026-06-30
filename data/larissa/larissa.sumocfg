@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Larissa SUMO scenario.
+     Run from the repository root with:
+         sumo-gui -c data/larissa/larissa.sumocfg
+     or headless with:
+         sumo -c data/larissa/larissa.sumocfg
+     Paths below are relative to THIS file (data/larissa/). -->
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="net/larissa.net.xml"/>
+        <route-files value="routes/larissa.rou.xml"/>
+        <additional-files value="zones/larissa_zones.poly.xml"/>
+    </input>
+
+    <time>
+        <begin value="0"/>
+        <end value="86400"/>
+        <step-length value="1"/>
+    </time>
+
+    <processing>
+        <!-- Teleport vehicles stuck for >5 min so the sim doesn't gridlock. -->
+        <time-to-teleport value="300"/>
+    </processing>
+
+    <report>
+        <no-step-log value="true"/>
+        <duration-log.statistics value="true"/>
+    </report>
+
+</configuration>

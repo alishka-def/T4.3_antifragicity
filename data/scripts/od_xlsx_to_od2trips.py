@@ -23,7 +23,7 @@ Usage
 -----
     python data/scripts/od_xlsx_to_od2trips.py \
         --xlsx OD-matrix-main/outputs/hourly_od_Larissa.xlsx \
-        --out-dir data/od \
+        --out-dir data/larissa/od \
         --prefix larissa
 
 """
