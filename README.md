@@ -27,7 +27,7 @@ vehicles, and the zone polygons drawn on top.
 ```
 T4.3_antifragicity/
 ├── README.md                     ← this file
-├── .gitignore                    ← large/generated files kept out of git (see §6)
+├── .gitignore                    ← large/generated files kept out of git (see §5)
 │
 ├── od-matrix/               ← STAGE 1: OD-matrix estimation (upstream of SUMO)
 │   ├── main.py                   ← entry point; loops over cities in multi-config.json
@@ -305,113 +305,7 @@ written — it never starts SUMO itself.
 
 ---
 
-## 4b. Bratislava with real Visum demand (06:00–11:00)
-
-Besides the synthetic grid OD, Bratislava has a scenario driven by **real OD
-matrices from the city's PTV Visum model** (ETH Zürich export), overlaid on the
-same fixed-time network `net/bratislava_static.net.xml`. Inputs live in
-`data/bratislava/visum/`:
-
-| File | What it is |
-|---|---|
-| `Car_06_09.mtx`, `Car_08_11.mtx` | car OD matrices, V-format (`$V;D3`), 376 Visum zones, windows 06:00–09:00 and 08:00–11:00 |
-| `bratislava_network.net` | Visum network export (EPSG:5514) — source of zone/connector/node coordinates (git-ignored, 68 MB) |
-| `bratislava_vtypes.xml` | the single `passenger` vType used by the trips |
-
-**The zone contract:** TAZ ids = Visum zone numbers (5025…6029), so the `.mtx`
-files feed `od2trips` directly. The TAZ is built by snapping each zone's
-connector nodes (fallback: centroid) to the nearest car-routable edges of the
-static net; the ~110 external/cordon zones (surrounding municipalities, AT/HU,
-long-distance corridors — ~2 % of demand) snap to the nearest major road at the
-network fringe:
-
-```bash
-python data/scripts/visum_zones_to_taz.py \
-  --visum-net data/bratislava/visum/bratislava_network.net \
-  --net-file data/bratislava/net/bratislava_static.net.xml \
-  --crs EPSG:5514 \
-  --mtx data/bratislava/visum/Car_06_09.mtx --mtx data/bratislava/visum/Car_08_11.mtx \
-  --output data/bratislava/taz/bratislava_visum.taz.xml
-```
-
-**Combining the two matrices (they overlap 08:00–09:00):** matrix values are
-never edited — only the departure windows are clipped in `od2trips`. The 06–09
-matrix is used in full; the 08–11 matrix is spread uniformly over its native
-window and clipped to 09:00–11:00, i.e. ⅔ of it is kept. Total demand =
-D(6–9) + ⅔·D(8–11) ≈ **396k vehicles**, with the overlap hour counted once.
-The exports carry a UTF-8 BOM `od2trips` cannot parse — strip it first:
-
-```bash
-cd data/bratislava/visum
-sed $'1s/^\xef\xbb\xbf//' Car_06_09.mtx > Car_06_09_clean.mtx
-sed $'1s/^\xef\xbb\xbf//' Car_08_11.mtx > Car_08_11_clean.mtx
-cd ../../..
-
-od2trips -n data/bratislava/taz/bratislava_visum.taz.xml \
-  -d data/bratislava/visum/Car_06_09_clean.mtx \
-  --begin 21600 --end 32400 --spread.uniform --vtype passenger --prefix vam_ \
-  --ignore-errors -o data/bratislava/routes/bratislava_visum_am.odtrips.xml
-
-od2trips -n data/bratislava/taz/bratislava_visum.taz.xml \
-  -d data/bratislava/visum/Car_08_11_clean.mtx \
-  --begin 32400 --end 39600 --spread.uniform --vtype passenger --prefix vlate_ \
-  --ignore-errors -o data/bratislava/routes/bratislava_visum_late.odtrips.xml
-
-duarouter --net-file data/bratislava/net/bratislava_static.net.xml \
-  --route-files data/bratislava/routes/bratislava_visum_am.odtrips.xml,data/bratislava/routes/bratislava_visum_late.odtrips.xml \
-  --additional-files data/bratislava/visum/bratislava_vtypes.xml \
-  --ignore-errors --repair --remove-loops \
-  --max-alternatives 1 --alternatives-output /dev/null --no-step-log \
-  -o data/bratislava/routes/bratislava_visum.rou.xml
-```
-
-Run it (set `<scale>` in the config — full demand saturates the city network):
-
-```bash
-sumo -c data/bratislava/bratislava_static_visum.sumocfg
-```
-
-Known limitations: the export has no zone polygons (point-anchor snapping
-only), and ~47 outer-borough zones (Devínska Nová Ves, Záhorská Bystrica, …)
-lie just outside the cropped network, so their demand enters at the fringe.
-
----
-
-## 5. Checking a network without the GUI
-
-The GUI can fail to render for environment reasons even when the model is fine.
-To validate headlessly:
-```bash
-# 1. stats — is it a real, non-empty net?
-python -c "import sumolib; n=sumolib.net.readNet('data/<city>/net/<city>.net.xml'); print(len(n.getNodes()),'nodes', len(n.getEdges()),'edges', round(sum(e.getLength() for e in n.getEdges())/1000),'km')"
-
-# 2. load test — does SUMO parse it without errors? (only harmless tlLogic warnings expected)
-sumo -n data/<city>/net/<city>.net.xml -e 1 --no-step-log
-
-# 3. full smoke test — do routes load and vehicles move?
-sumo -c data/<city>/<city>.sumocfg -e 600
-```
-**Render a plain gray map of the network** to an image:
-```bash
-python - <<'PY'
-import sumolib, matplotlib; matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
-city = "<city>"
-net = sumolib.net.readNet(f"data/{city}/net/{city}.net.xml")
-fig, ax = plt.subplots(figsize=(10, 10))
-ax.add_collection(LineCollection([e.getShape() for e in net.getEdges()], colors="0.5", linewidths=0.4))
-ax.set_aspect("equal"); ax.autoscale(); ax.axis("off")
-fig.savefig(f"data/{city}/net_preview.png", dpi=200, bbox_inches="tight", facecolor="white")
-print("wrote", f"data/{city}/net_preview.png")
-PY
-```
-A speed-coloured version is also available via
-`$SUMO_HOME/tools/visualization/plot_net_speeds.py -n <net> -o <out>.png`.
-
----
-
-## 6. Git-ignored files
+## 5. Git-ignored files
 
 Large or generated artefacts are **not** committed (see `.gitignore`); regenerate
 them locally with the steps above:
@@ -427,27 +321,3 @@ The committed inputs (`*.od`, `*.taz.xml`, `*.poly.xml`, `keep_edges.txt`,
 `*_grid_zones.geojson`, `*.sumocfg`) let you skip the OD estimation and zone
 building: regenerate the network (Steps 1–2), then the trips and routes
 (Steps 5–6), and run.
-
----
-
-## 7. City status
-
-| City | Country | Zones | OD matrix | SUMO model |
-|---|---|---|---|---|
-| **Larissa**    | Greece   | 86 (Z0…Z85)  | ✅ | ✅ built |
-| **Bratislava** | Slovakia | 78 (Z0…Z77)  | ✅ | ✅ built |
-| **Odessa**     | Ukraine  | 65 (Z0…Z64)  | ✅ | ✅ built |
-
----
-
-## 8. Troubleshooting
-
-| Symptom | Likely cause / fix |
-|---|---|
-| OSMWebWizard browser doesn't open | No default browser / local server blocked. Open `http://localhost:8010` manually; on a headless box use `--remote`. |
-| OSMWebWizard "Could not download" | No outbound internet to the Overpass API, or selected area too large. Shrink the rectangle. |
-| `sumolib` / `edgesInDistricts.py` not found | `SUMO_HOME` not set, or `$SUMO_HOME/tools` not importable. |
-| Zone count (Step 3) ≠ zones in xlsx | `--cell-size` differs from `multi-config.json` (must be 3000), or a different boundary was used. |
-| `od2trips` "missing district / no edges" | A zone has no edges after cropping. Re-run Step 5 **with** `--taz-file`, or rely on `--ignore-errors`. |
-| Network looks disconnected / vehicles teleport | Re-run Step 2 with `--keep-edges.components 1`. |
-| GUI blank/black on macOS | Qt/OpenGL rendering issue, not the model — resize the window or use zoom-to-fit; verify headlessly (§5). |
