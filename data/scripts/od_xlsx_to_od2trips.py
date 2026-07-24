@@ -1,6 +1,6 @@
 """
 Convert the hourly OD matrix produced by the OD-matrix pipeline
-(OD-matrix-main/outputs/hourly_od_<City>.xlsx) into VISUM "O-format" matrix
+(od-matrix/outputs/hourly_od_<City>.xlsx) into VISUM "O-format" matrix
 files that SUMO's od2trips can read -- one file per hour, each carrying its own
 time window.
 
@@ -22,7 +22,7 @@ Each output file looks like:
 Usage
 -----
     python data/scripts/od_xlsx_to_od2trips.py \
-        --xlsx OD-matrix-main/outputs/hourly_od_Larissa.xlsx \
+        --xlsx od-matrix/outputs/hourly_od_Larissa.xlsx \
         --out-dir data/larissa/od \
         --prefix larissa
 

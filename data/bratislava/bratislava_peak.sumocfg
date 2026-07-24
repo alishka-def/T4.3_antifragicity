@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="net/bratislava_static.net.xml"/>
+        <route-files value="routes/bratislava_peak.rou.xml"/>
+    </input>
+
+    <time>
+        <begin value="21600"/>
+        <end value="39600"/>
+        <step-length value="1"/>
+    </time>
+
+    <output>
+        <tripinfo-output value="sim/bratislava_peak_scale024.tripinfo.xml"/>
+        <tripinfo-output.write-unfinished value="true"/>
+        <statistic-output value="sim/bratislava_peak_scale024.stats.xml"/>
+        <summary-output value="sim/bratislava_peak_scale024.summary.xml"/>
+    </output>
+
+    <processing>
+        <time-to-teleport value="300"/>
+        <ignore-junction-blocker value="1"/>
+        <no-internal-links value="true"/>
+        <scale value="0.24"/>
+    </processing>
+
+    <routing>
+        <device.rerouting.probability value="0.5"/>
+        <device.rerouting.period value="300"/>
+        <device.rerouting.adaptation-interval value="10"/>
+    </routing>
+
+    <report>
+        <no-step-log value="true"/>
+        <duration-log.statistics value="true"/>
+    </report>
+
+</configuration>

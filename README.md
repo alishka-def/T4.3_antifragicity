@@ -8,7 +8,7 @@ matrix and an OpenStreetMap road network to a runnable `sumo-gui` scenario.
 
 The project has **two loosely-coupled stages**:
 
-1. **`OD-matrix-main/`** — a Python pipeline that estimates a synthetic,
+1. **`od-matrix/`** — a Python pipeline that estimates a synthetic,
    gravity/entropy-based **OD matrix per hour of the day** over a regular grid of
    zones. It produces, per city, an Excel workbook with one OD matrix per hour
    (`hourly_od_<City>.xlsx`). This is the *upstream* stage.
@@ -29,7 +29,7 @@ T4.3_antifragicity/
 ├── README.md                     ← this file
 ├── .gitignore                    ← large/generated files kept out of git (see §6)
 │
-├── OD-matrix-main/               ← STAGE 1: OD-matrix estimation (upstream of SUMO)
+├── od-matrix/               ← STAGE 1: OD-matrix estimation (upstream of SUMO)
 │   ├── main.py                   ← entry point; loops over cities in multi-config.json
 │   ├── multi-config.json         ← per-city settings (grid size, trips, hourly profile…)
 │   ├── modules/                  ← pipeline modules (zones, OD generation, plots, …)
@@ -37,8 +37,7 @@ T4.3_antifragicity/
 │   │   ├── city_boundaries/<City>/<City>-v1.geojson   ← admin boundary (lon/lat)
 │   │   └── graphs/<City>/<City>-v1.graphml            ← OSM routing graph
 │   └── outputs/
-│       ├── hourly_od_<City>.xlsx ← THE OD MATRIX (one sheet per hour: hour_0…hour_23)
-│       └── <City>_OD_academic.(png|pdf)              ← heatmap figures
+│       └── hourly_od_<City>.xlsx ← THE OD MATRIX (one sheet per hour: hour_0…hour_23)
 │
 └── data/                         ← STAGE 2: SUMO models + conversion scripts
     ├── scripts/                  ← shared, city-agnostic conversion utilities
@@ -46,10 +45,13 @@ T4.3_antifragicity/
     │   ├── build_grid_taz_zones.py   ← rebuild the SAME grid zones as the OD pipeline
     │   ├── geojson_to_sumo_poly.py   ← grid GeoJSON → SUMO polygons (.poly.xml)
     │   ├── od_xlsx_to_od2trips.py    ← hourly OD xlsx → VISUM O-format .od files
-    │   └── run_simulation.py         ← headless 24 h run: progress bar, timing, VKT/VHT
+    │   ├── tls_actuated_to_static.py ← derive fixed-time (static) TLS net + config
+    │   └── sim_outputs.py            ← print the summary of a finished run (VKT, VHT, …)
     │
     ├── larissa/                  ← one self-contained folder per city
-    │   ├── larissa.sumocfg       ← SUMO config (paths relative to this folder)
+    │   ├── larissa.sumocfg       ← SUMO config, full 24 h day (paths relative to this folder)
+    │   ├── larissa_static.sumocfg    ← same, on the fixed-time-TLS network variant
+    │   ├── larissa_peak.sumocfg      ← morning peak 06:00–11:00 (peak-only routes)
     │   ├── net/
     │   │   ├── <city>_full.net.xml   ← full network from OSM         (git-ignored)
     │   │   ├── keep_edges.txt        ← edge IDs inside the boundary
@@ -96,15 +98,15 @@ For the **conversion scripts** in `data/scripts/`:
 ```
 sumolib   shapely   geopandas   pandas   openpyxl   matplotlib
 ```
-For the **OD-matrix pipeline** (`OD-matrix-main/`), additionally:
+For the **OD-matrix pipeline** (`od-matrix/`), additionally:
 ```
-networkx   osmnx   numpy   rasterio   streamlit
+networkx   osmnx   numpy   rasterio   rasterstats   scipy   seaborn
 ```
 Conda is recommended because of geopandas/shapely:
 ```bash
 conda create -n t43 python=3.12
 conda activate t43
-conda install -c conda-forge geopandas shapely sumolib osmnx rasterio networkx pandas openpyxl matplotlib
+conda install -c conda-forge geopandas shapely sumolib osmnx rasterio rasterstats networkx scipy pandas openpyxl matplotlib seaborn
 ```
 Make sure `sumolib` resolves to your SUMO version and that `$SUMO_HOME/tools` is
 importable so `edgesInDistricts.py` is found.
@@ -125,15 +127,17 @@ The pipeline turns three inputs into a running simulation:
 
 | Input | Where it comes from |
 |---|---|
-| City boundary GeoJSON | `OD-matrix-main/data/city_boundaries/<City>/<City>-v1.geojson` |
-| Hourly OD matrix      | `OD-matrix-main/outputs/hourly_od_<City>.xlsx` (Stage 0) |
+| City boundary GeoJSON | `od-matrix/data/city_boundaries/<City>/<City>-v1.geojson` |
+| Hourly OD matrix      | `od-matrix/outputs/hourly_od_<City>.xlsx` (Stage 0) |
 | Raw OSM road network  | downloaded in Step 1 (the only thing you fetch fresh) |
 
 ### Stage 0 — (optional) Generate the OD matrix
 Only needed if `hourly_od_<City>.xlsx` is missing or its inputs changed. It needs
-the city's routing graph and a population raster (rasters are git-ignored).
+the city's routing graph and a population raster. The WorldPop `*_ppp_2020.tif`
+rasters are git-ignored — download each country's 2020 UN-adjusted 100 m raster
+from https://hub.worldpop.org/ into `data/<city>/`.
 ```bash
-cd OD-matrix-main && python main.py && cd ..
+cd od-matrix && python main.py && cd ..
 ```
 For each city in `multi-config.json` this lays a regular square grid
 (`cell_size`, default **3000 m**) over the boundary, snaps zones to network
@@ -172,7 +176,7 @@ netconvert -s "<TS>/osm.net.xml.gz" -o data/<city>/net/<city>_full.net.xml
 ```bash
 python data/scripts/crop_net_to_boundary.py \
   --net-file data/<city>/net/<city>_full.net.xml \
-  --geojson-file OD-matrix-main/data/city_boundaries/<City>/<City>-v1.geojson \
+  --geojson-file od-matrix/data/city_boundaries/<City>/<City>-v1.geojson \
   --output data/<city>/net/keep_edges.txt
 
 netconvert -s data/<city>/net/<city>_full.net.xml \
@@ -182,18 +186,15 @@ netconvert -s data/<city>/net/<city>_full.net.xml \
 ```
 `--keep-edges.components 1` drops disconnected fragments so the network stays
 routable. **Result:** `data/<city>/net/<city>.net.xml` — the network the
-simulation uses.
-
-> ⚠️ The crop script prints a ready-to-paste `netconvert` command, but it
-> hardcodes `larissa.net.xml` as the output name. Use `-o
-> data/<city>/net/<city>.net.xml` for other cities.
+simulation uses. The crop script also prints a ready-to-paste `netconvert`
+command with the correct per-city output name.
 
 ### Step 3 — Build the zone polygons
 Rebuild **the same grid** the OD pipeline used (must match `--cell-size`), then
 convert it to SUMO polygons in the network's coordinate system:
 ```bash
 python data/scripts/build_grid_taz_zones.py \
-  --city-shp OD-matrix-main/data/city_boundaries/<City>/<City>-v1.geojson \
+  --city-shp od-matrix/data/city_boundaries/<City>/<City>-v1.geojson \
   --cell-size 3000 \
   --output data/<city>/zones/<city>_grid_zones.geojson
 
@@ -224,7 +225,7 @@ Turn each `hour_*` sheet into a VISUM **O-format** `.od` file (passing the TAZ s
 relations referencing edge-less zones are dropped), then expand to trips:
 ```bash
 python data/scripts/od_xlsx_to_od2trips.py \
-  --xlsx OD-matrix-main/outputs/hourly_od_<City>.xlsx \
+  --xlsx od-matrix/outputs/hourly_od_<City>.xlsx \
   --out-dir data/<city>/od --prefix <city> \
   --taz-file data/<city>/taz/<city>.taz.xml
 
@@ -269,16 +270,110 @@ sumo-gui -c data/<city>/<city>.sumocfg
 ```
 Press the green ▶ to start. The red polygons are the OD zones.
 
-**Headless 24 h run with metrics** (VKT = vehicle-km, VHT = vehicle-hours, plus
-wall-clock time and a live progress bar):
+**Headless:**
 ```bash
-python data/scripts/run_simulation.py \
-  --net data/<city>/net/<city>.net.xml \
-  --routes data/<city>/routes/<city>.rou.xml \
-  --additional data/<city>/zones/<city>_zones.poly.xml \
-  --tripinfo data/<city>/sim/<city>.tripinfo.xml \
-  --horizon 86400
+sumo -c data/<city>/<city>.sumocfg
 ```
+
+### Scenario variants
+
+Each city ships three configs:
+
+| Config | What it is |
+|---|---|
+| `<city>.sumocfg` | full 24 h day, network as imported from OSM (actuated TLS) |
+| `<city>_static.sumocfg` | same day on the fixed-time-TLS network variant |
+| `<city>_peak.sumocfg` | morning peak **06:00–11:00** (`begin` 21600 s, `end` 39600 s) with peak-only routes and dynamic rerouting; a `<scale>` factor in `<processing>` sets the demand level |
+
+- The **static** network (`net/<city>_static.net.xml`) and config are generated
+  from the normal ones with
+  `python data/scripts/tls_actuated_to_static.py` (all cities at once).
+- The **peak** routes (`routes/<city>_peak.rou.xml`) are built exactly like
+  Steps 5–6 but feeding only the peak-hour matrices
+  (`<city>_hour_6.od … <city>_hour_10.od`) to `od2trips`.
+
+### Reading the results
+
+After any run, print a clear summary of its outputs (steps, peak vehicles,
+arrived/unfinished, teleports, VKT, VHT, mean speed, mean trip, delay, waiting):
+```bash
+python data/scripts/sim_outputs.py data/<city>/<city>_peak.sumocfg   # paths from the config
+python data/scripts/sim_outputs.py data/<city>/sim/<run_prefix>      # or a run prefix
+```
+It only reads the `tripinfo` / `stats` / `summary` XML files a finished run has
+written — it never starts SUMO itself.
+
+---
+
+## 4b. Bratislava with real Visum demand (06:00–11:00)
+
+Besides the synthetic grid OD, Bratislava has a scenario driven by **real OD
+matrices from the city's PTV Visum model** (ETH Zürich export), overlaid on the
+same fixed-time network `net/bratislava_static.net.xml`. Inputs live in
+`data/bratislava/visum/`:
+
+| File | What it is |
+|---|---|
+| `Car_06_09.mtx`, `Car_08_11.mtx` | car OD matrices, V-format (`$V;D3`), 376 Visum zones, windows 06:00–09:00 and 08:00–11:00 |
+| `bratislava_network.net` | Visum network export (EPSG:5514) — source of zone/connector/node coordinates (git-ignored, 68 MB) |
+| `bratislava_vtypes.xml` | the single `passenger` vType used by the trips |
+
+**The zone contract:** TAZ ids = Visum zone numbers (5025…6029), so the `.mtx`
+files feed `od2trips` directly. The TAZ is built by snapping each zone's
+connector nodes (fallback: centroid) to the nearest car-routable edges of the
+static net; the ~110 external/cordon zones (surrounding municipalities, AT/HU,
+long-distance corridors — ~2 % of demand) snap to the nearest major road at the
+network fringe:
+
+```bash
+python data/scripts/visum_zones_to_taz.py \
+  --visum-net data/bratislava/visum/bratislava_network.net \
+  --net-file data/bratislava/net/bratislava_static.net.xml \
+  --crs EPSG:5514 \
+  --mtx data/bratislava/visum/Car_06_09.mtx --mtx data/bratislava/visum/Car_08_11.mtx \
+  --output data/bratislava/taz/bratislava_visum.taz.xml
+```
+
+**Combining the two matrices (they overlap 08:00–09:00):** matrix values are
+never edited — only the departure windows are clipped in `od2trips`. The 06–09
+matrix is used in full; the 08–11 matrix is spread uniformly over its native
+window and clipped to 09:00–11:00, i.e. ⅔ of it is kept. Total demand =
+D(6–9) + ⅔·D(8–11) ≈ **396k vehicles**, with the overlap hour counted once.
+The exports carry a UTF-8 BOM `od2trips` cannot parse — strip it first:
+
+```bash
+cd data/bratislava/visum
+sed $'1s/^\xef\xbb\xbf//' Car_06_09.mtx > Car_06_09_clean.mtx
+sed $'1s/^\xef\xbb\xbf//' Car_08_11.mtx > Car_08_11_clean.mtx
+cd ../../..
+
+od2trips -n data/bratislava/taz/bratislava_visum.taz.xml \
+  -d data/bratislava/visum/Car_06_09_clean.mtx \
+  --begin 21600 --end 32400 --spread.uniform --vtype passenger --prefix vam_ \
+  --ignore-errors -o data/bratislava/routes/bratislava_visum_am.odtrips.xml
+
+od2trips -n data/bratislava/taz/bratislava_visum.taz.xml \
+  -d data/bratislava/visum/Car_08_11_clean.mtx \
+  --begin 32400 --end 39600 --spread.uniform --vtype passenger --prefix vlate_ \
+  --ignore-errors -o data/bratislava/routes/bratislava_visum_late.odtrips.xml
+
+duarouter --net-file data/bratislava/net/bratislava_static.net.xml \
+  --route-files data/bratislava/routes/bratislava_visum_am.odtrips.xml,data/bratislava/routes/bratislava_visum_late.odtrips.xml \
+  --additional-files data/bratislava/visum/bratislava_vtypes.xml \
+  --ignore-errors --repair --remove-loops \
+  --max-alternatives 1 --alternatives-output /dev/null --no-step-log \
+  -o data/bratislava/routes/bratislava_visum.rou.xml
+```
+
+Run it (set `<scale>` in the config — full demand saturates the city network):
+
+```bash
+sumo -c data/bratislava/bratislava_static_visum.sumocfg
+```
+
+Known limitations: the export has no zone polygons (point-anchor snapping
+only), and ~47 outer-borough zones (Devínska Nová Ves, Záhorská Bystrica, …)
+lie just outside the cropped network, so their demand enters at the fringe.
 
 ---
 
@@ -322,15 +417,16 @@ Large or generated artefacts are **not** committed (see `.gitignore`); regenerat
 them locally with the steps above:
 
 - `data/*/net/*.net.xml` — the full and cropped networks (Steps 1–2)
-- `data/*/raw/*.osm.pbf` — raw OSM extracts
-- `data/*/routes/*.rou.xml`, `*.rou.alt.xml` — routed vehicles (Step 6)
+- `data/*/raw/*.osm.pbf`, `*.osm.xml` — raw OSM extracts
+- `data/*/routes/*.odtrips.xml`, `*.rou.xml`, `*.rou.alt.xml` — trips and routed vehicles (Steps 5–6)
 - `data/*/sim/*.xml` — simulation outputs (tripinfo)
+- `data/*/*_ppp_2020.tif` — WorldPop population rasters
 - `.DS_Store`, `Thumbs.db`, `__pycache__/`, `*.pyc` — OS/Python junk
 
-The committed inputs (`*.od`, `*.taz.xml`, `*.poly.xml`, `*.odtrips.xml`,
-`keep_edges.txt`, `*_grid_zones.geojson`, `raw/*.osm.xml`, `*.sumocfg`) let you
-skip straight to routing: regenerate just the two network files (Steps 1–2) and
-the routes (Step 6), then run.
+The committed inputs (`*.od`, `*.taz.xml`, `*.poly.xml`, `keep_edges.txt`,
+`*_grid_zones.geojson`, `*.sumocfg`) let you skip the OD estimation and zone
+building: regenerate the network (Steps 1–2), then the trips and routes
+(Steps 5–6), and run.
 
 ---
 

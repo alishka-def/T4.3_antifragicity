@@ -1,10 +1,9 @@
 import osmnx as ox
 
-# Définir les villes avec coordonnées approximatives pour les villes qui posent problème
 cities = {
     "Bratislava": {"method": "place", "query": "Bratislava, Slovakia"},
     "Odesa": {"method": "place", "query": "Odesa, Ukraine"},
-    "Larissa": {"method": "point", "coords": (39.639, 22.417), "dist": 10000}  # rayon 10 km
+    "Larissa": {"method": "point", "coords": (39.639, 22.417), "dist": 10000}
 }
 
 for city, params in cities.items():

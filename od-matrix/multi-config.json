@@ -32,10 +32,10 @@
   "cities": [
     {
       "city_name": "Larissa",
-      "sensors_csv": "data/sensors/Larissa/Larissa_hourly_counts-v2.csv",
+      "sensors_csv": null,
       "city_shp": "data/city_boundaries/Larissa/Larissa-v1.geojson",
       "graph": "data/graphs/Larissa/Larissa-v1.graphml",
-      "pop_raster": "data/population/Larissa/Larissa_pop_2020.tif",
+      "pop_raster": "../data/larissa/grc_ppp_2020.tif",
       "total_trips":  350000,
       "target_dist": 7.5
     },
@@ -44,7 +44,7 @@
       "sensors_csv": null,
       "city_shp": "data/city_boundaries/Bratislava/Bratislava-v1.geojson",
       "graph": "data/graphs/Bratislava/Bratislava-v1.graphml",
-      "pop_raster": "data/population/Bratislava/Bratislava_pop_2020.tif",
+      "pop_raster": "../data/bratislava/svk_ppp_2020.tif",
       "total_trips":  1200000,
       "target_dist": 6.5
     },
@@ -53,7 +53,7 @@
       "sensors_csv": null, 
       "city_shp": "data/city_boundaries/Odessa/Odessa-v1.geojson",
       "graph": "data/graphs/Odessa/Odessa-v1.graphml",
-      "pop_raster": "data/population/Odessa/Odessa_pop_2020.tif",
+      "pop_raster": "../data/odessa/ukr_ppp_2020.tif",
       "total_trips":  2500000,
       "target_dist": 9
     }

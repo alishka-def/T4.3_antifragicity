@@ -2,7 +2,7 @@
 Usage
 -----
     python data/scripts/build_grid_taz_zones.py \
-        --city-shp OD-matrix-main/data/city_boundaries/Larissa/Larissa-v1.geojson \
+        --city-shp od-matrix/data/city_boundaries/Larissa/Larissa-v1.geojson \
         --cell-size 3000 \
         --output data/larissa/zones/larissa_grid_zones.geojson
 """

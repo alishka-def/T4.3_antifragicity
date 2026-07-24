@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- Odessa SUMO scenario.
+     Run from the repository root with:
+         sumo-gui -c data/odessa/odessa.sumocfg
+     or headless with:
+         sumo -c data/odessa/odessa.sumocfg
+     Paths below are relative to THIS file (data/odessa/).
+     NOTE: net / routes / poly are produced by the build steps; this config
+     will run once those files exist. -->
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="net/odessa_static.net.xml"/>
+        <route-files value="routes/odessa.rou.xml"/>
+    </input>
+
+    <time>
+        <begin value="0"/>
+        <end value="86400"/>
+        <step-length value="1"/>
+    </time>
+
+    <processing>
+        <!-- Teleport vehicles stuck for >5 min so the sim doesn't gridlock. -->
+        <time-to-teleport value="300"/>
+    </processing>
+
+    <routing>
+        <!-- In-sim (dynamic) rerouting: every vehicle periodically re-routes
+             around congestion using measured edge travel times, instead of
+             keeping its fixed one-shot duarouter path. Spreads flow across
+             parallel routes and prevents corridor gridlock. -->
+        <device.rerouting.probability value="1"/>
+        <device.rerouting.period value="300"/>
+        <device.rerouting.adaptation-interval value="10"/>
+    </routing>
+
+    <report>
+        <no-step-log value="true"/>
+        <duration-log.statistics value="true"/>
+    </report>
+
+</configuration>

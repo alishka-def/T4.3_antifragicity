@@ -14,7 +14,6 @@
     <input>
         <net-file value="net/odessa.net.xml"/>
         <route-files value="routes/odessa.rou.xml"/>
-        <additional-files value="zones/odessa_zones.poly.xml"/>
     </input>
 
     <time>
@@ -27,6 +26,16 @@
         <!-- Teleport vehicles stuck for >5 min so the sim doesn't gridlock. -->
         <time-to-teleport value="300"/>
     </processing>
+
+    <routing>
+        <!-- In-sim (dynamic) rerouting: every vehicle periodically re-routes
+             around congestion using measured edge travel times, instead of
+             keeping its fixed one-shot duarouter path. Spreads flow across
+             parallel routes and prevents corridor gridlock. -->
+        <device.rerouting.probability value="1"/>
+        <device.rerouting.period value="300"/>
+        <device.rerouting.adaptation-interval value="10"/>
+    </routing>
 
     <report>
         <no-step-log value="true"/>

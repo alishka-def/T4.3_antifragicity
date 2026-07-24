@@ -3,7 +3,7 @@ Usage
 -----
     python data/scripts/crop_net_to_boundary.py \
         --net-file data/larissa/net/larissa_full.net.xml \
-        --geojson-file OD-matrix-main/data/city_boundaries/Larissa/Larissa-v1.geojson \
+        --geojson-file od-matrix/data/city_boundaries/Larissa/Larissa-v1.geojson \
         --output data/larissa/net/keep_edges.txt
 
 Then crop with netconvert (see the printed command at the end).
